@@ -1,13 +1,14 @@
-# Sample Hardhat Project
+# Turtle NFT sample smart contract
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+## List
+* ERC20 smart contract
+* ERC721 smart contract
+* Coverage test cases for happy paths
 
-Try running some of the following tasks:
-
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js
-```
+## ERC-721 Features
+* Max NFT limit: 10625
+* Able to pause/unpause minting and burn NFT
+* Admin minting for any address and no fees
+* Public batch minting (max mint 20) in native token and ERC-20 token
+* Allow to set native token fees and ERC 20 token fees
+* Able to set base URI for revealing event
