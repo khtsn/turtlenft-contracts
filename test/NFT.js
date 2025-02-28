@@ -21,7 +21,7 @@ describe("NFT", function () {
 
     // Deploy NFT contract
     const NFT = await ethers.getContractFactory("NFT");
-    const nft = await NFT.deploy(owner.address, baseURI, token.target, ethers.parseEther("0.01"), ethers.parseEther("100"));
+    const nft = await NFT.deploy(owner.address, baseURI, token.target, ethers.parseEther("1"), ethers.parseEther("10"));
     await nft.waitForDeployment();
 
     return { token, nft, owner, addr1, addr2 };
@@ -68,7 +68,7 @@ describe("NFT", function () {
 
     it("Should public mint NFTs with native token", async function () {
       const { nft, owner, addr1, addr2 } = await loadFixture(deploySimple);
-      await nft.connect(addr1).publicMintWithNativeToken(1, { value: ethers.parseEther("0.01") });
+      await nft.connect(addr1).publicMintWithNativeToken(1, { value: ethers.parseEther("1") });
       expect(await nft.balanceOf(addr1.address)).to.equal(1);
     });
   
@@ -79,8 +79,8 @@ describe("NFT", function () {
   
     it("Should public mint NFTs with ERC20 token", async function () {
       const { token, nft, owner, addr1, addr2 } = await loadFixture(deploySimple);
-      await token.transfer(addr1.address, ethers.parseEther("100"));
-      await token.connect(addr1).approve(nft.target, ethers.parseEther("100"));
+      await token.transfer(addr1.address, ethers.parseEther("10"));
+      await token.connect(addr1).approve(nft.target, ethers.parseEther("10"));
       await nft.connect(addr1).publicMintWithERC20Token(1);
       expect(await nft.balanceOf(addr1.address)).to.equal(1);
     });
