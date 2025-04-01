@@ -5,6 +5,7 @@ const {
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const baseURI = "https://baseurl.com/";
+const revealURI = "https://revealurl.com/";
 
 describe("NFT", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -21,7 +22,7 @@ describe("NFT", function () {
 
     // Deploy NFT contract
     const NFT = await ethers.getContractFactory("NFT");
-    const nft = await NFT.deploy(owner.address, baseURI, token.target, ethers.parseEther("1"), ethers.parseEther("10"));
+    const nft = await NFT.deploy(owner.address, baseURI, revealURI, token.target, ethers.parseEther("1"), ethers.parseEther("10"));
     await nft.waitForDeployment();
 
     return { token, nft, owner, addr1, addr2 };
@@ -62,6 +63,7 @@ describe("NFT", function () {
 
     it("Should show token URI", async function () {
       const { nft: nft, owner } = await loadFixture(deploySimple);
+      await nft.toggleReveal();
       await nft.adminMint(owner.address, 1);
       expect(await nft.tokenURI(0)).to.equal(`${baseURI}0`);
     });
@@ -104,15 +106,84 @@ describe("NFT", function () {
   describe("Role Management", function () {
       it("Should only allow owner to pause minting", async function () {
         const { nft: nft, addr1 } = await loadFixture(deploySimple);
-          await expect(nft.connect(addr1).pause()).to.be.reverted;
+        await expect(nft.connect(addr1).pause()).to.be.reverted;
       });
   });
 
   describe("Base URL Management", function () {
       it("Should allow changing the base URL", async function () {
         const { nft: nft } = await loadFixture(deploySimple);
-          await nft.setBaseURI("https://newbaseurl.com/");
-          expect(await nft.baseTokenURI()).to.equal("https://newbaseurl.com/");
+        await nft.setBaseURI("https://newbaseurl.com/");
+        expect(await nft.baseTokenURI()).to.equal("https://newbaseurl.com/");
       });
+  });
+
+  describe("Withdraw", function () {
+    it("Should allow owner to withdraw funds on native tokens", async function () {
+      const { nft: nft, owner, addr1 } = await loadFixture(deploySimple);
+      // Mint with native token to generate balance
+      await nft.connect(addr1).publicMintWithNativeToken(1, { value: ethers.parseEther("10") });
+      const initialOwnerBalance = await ethers.provider.getBalance(owner.address);
+  
+      // Withdraw funds
+      await nft.connect(owner).withdraw();
+  
+      const finalOwnerBalance = await ethers.provider.getBalance(owner.address);
+      expect(finalOwnerBalance).to.be.gt(initialOwnerBalance);
+    });
+
+    it("Should allow owner to withdraw ERC20 token funds", async function () {
+      const { token, nft, owner, addr1 } = await loadFixture(deploySimple);
+      // Mint with ERC20 token to generate balance
+      await token.transfer(addr1.address, ethers.parseEther("10"));
+      await token.connect(addr1).approve(nft.target, ethers.parseEther("10"));
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+  
+      const initialOwnerERC20Balance = await token.balanceOf(owner.address);
+  
+      // Withdraw ERC20 funds
+      await nft.connect(owner).withdrawERC20();
+  
+      const finalOwnerERC20Balance = await token.balanceOf(owner.address);
+      expect(finalOwnerERC20Balance).to.be.gt(initialOwnerERC20Balance);
+    });
+  });
+
+  describe("Reveal", function () {
+    it("Should return the correct token URI before and after reveal", async function () {
+      const { nft: nft, owner, addr1 } = await loadFixture(deploySimple);
+      // Mint a token
+      await nft.connect(addr1).publicMintWithNativeToken(1, { value: ethers.parseEther("10") });
+      const tokenId = 0;
+  
+      // Check token URI before reveal
+      let tokenURI = await nft.tokenURI(tokenId);
+      expect(tokenURI).to.equal("https://revealurl.com/");
+  
+      // Toggle reveal
+      await nft.connect(owner).toggleReveal();
+  
+      // Check token URI after reveal
+      tokenURI = await nft.tokenURI(tokenId);
+      expect(tokenURI).to.equal("https://baseurl.com/0");
+    });
+  
+    it("Should toggle reveal state", async function () {
+      const { nft: nft, owner } = await loadFixture(deploySimple);
+      // Initial reveal state should be false
+      expect(await nft.isRevealed()).to.equal(true);
+  
+      // Toggle reveal
+      await nft.connect(owner).toggleReveal();
+  
+      // Reveal state should be true
+      expect(await nft.isRevealed()).to.equal(false);
+  
+      // Toggle reveal again
+      await nft.connect(owner).toggleReveal();
+  
+      // Reveal state should be false again
+      expect(await nft.isRevealed()).to.equal(true);
+    });
   });
 });

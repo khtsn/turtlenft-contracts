@@ -12,15 +12,19 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
     uint256 public constant MAX_SUPPLY = 10625;
     uint256 private _nextTokenId;
     string public baseTokenURI;
+    string public revealTokenURI;
+    bool public isRevealed;
     uint256 public nativeTokenFee;
     uint256 public erc20TokenFee;
     IERC20 public erc20Token;
 
-    constructor(address initialOwner, string memory baseURI, address erc20TokenAddress, uint256 _nativeTokenFee, uint256 _erc20TokenFee)
+    constructor(address initialOwner, string memory baseURI, string memory _revealTokenURI, address erc20TokenAddress, uint256 _nativeTokenFee, uint256 _erc20TokenFee)
         ERC721("NFT", "nft")
         Ownable(initialOwner)
     {
         baseTokenURI = baseURI;
+        revealTokenURI = _revealTokenURI;
+        isRevealed = true;
         erc20Token = IERC20(erc20TokenAddress);
         nativeTokenFee = _nativeTokenFee;
         erc20TokenFee = _erc20TokenFee;
@@ -63,6 +67,10 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
         baseTokenURI = baseURI;
     }
 
+    function setRevealTokenURI(string memory _revealTokenURI) public onlyOwner {
+        revealTokenURI = _revealTokenURI;
+    }
+
     function _baseURI() internal pure override returns (string memory) {
         return "https://baseurl.com/";
     }
@@ -83,6 +91,25 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
         erc20TokenFee = _erc20TokenFee;
     }
 
+    function toggleReveal() public onlyOwner {
+        isRevealed = !isRevealed;
+    }
+
+    function withdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance == 0) revert("No balance to withdraw");
+        address owner = payable(msg.sender);
+
+        (bool ownerSuccess, ) = owner.call{value: address(this).balance}("");
+        require(ownerSuccess, "Failed to send to Owner.");
+    }
+
+    function withdrawERC20() external onlyOwner {
+        uint256 balance = erc20Token.balanceOf(address(this));
+        require(balance > 0, "No ERC20 balance to withdraw");
+        require(erc20Token.transfer(msg.sender, balance), "Failed to transfer ERC20 tokens");
+    }
+
     // The following functions are overrides required by Solidity.
 
     function _update(address to, uint256 tokenId, address auth)
@@ -99,6 +126,9 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
         override(ERC721, ERC721URIStorage)
         returns (string memory)
     {
+        if (isRevealed) {
+            return revealTokenURI;
+        }
         return super.tokenURI(tokenId);
     }
 
