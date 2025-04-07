@@ -33,6 +33,12 @@ describe("NFT", function () {
       const { nft, owner } = await loadFixture(deploySimple);
       expect(await nft.owner()).to.equal(owner.address);
     });
+
+    it("Should allow the owner to transfer ownership", async function () {
+      const { nft: nft, addr1 } = await loadFixture(deploySimple);
+      await nft.transferOwnership(addr1.address);
+      expect(await nft.owner()).to.equal(addr1.address);
+    })
   });
 
   describe("Minting", function () {
@@ -63,6 +69,7 @@ describe("NFT", function () {
 
     it("Should show token URI", async function () {
       const { nft: nft, owner } = await loadFixture(deploySimple);
+      expect(await nft.isRevealed()).to.equal(false);
       await nft.toggleReveal();
       await nft.adminMint(owner.address, 1);
       expect(await nft.tokenURI(0)).to.equal(`${baseURI}0`);
@@ -160,6 +167,7 @@ describe("NFT", function () {
       let tokenURI = await nft.tokenURI(tokenId);
       expect(tokenURI).to.equal("https://revealurl.com/");
   
+      expect(await nft.isRevealed()).to.equal(false);
       // Toggle reveal
       await nft.connect(owner).toggleReveal();
   
@@ -171,19 +179,19 @@ describe("NFT", function () {
     it("Should toggle reveal state", async function () {
       const { nft: nft, owner } = await loadFixture(deploySimple);
       // Initial reveal state should be false
-      expect(await nft.isRevealed()).to.equal(true);
+      expect(await nft.isRevealed()).to.equal(false);
   
       // Toggle reveal
       await nft.connect(owner).toggleReveal();
   
       // Reveal state should be true
-      expect(await nft.isRevealed()).to.equal(false);
+      expect(await nft.isRevealed()).to.equal(true);
   
       // Toggle reveal again
       await nft.connect(owner).toggleReveal();
   
       // Reveal state should be false again
-      expect(await nft.isRevealed()).to.equal(true);
+      expect(await nft.isRevealed()).to.equal(false);
     });
   });
 });

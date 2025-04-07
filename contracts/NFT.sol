@@ -19,12 +19,12 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
     IERC20 public erc20Token;
 
     constructor(address initialOwner, string memory baseURI, string memory _revealTokenURI, address erc20TokenAddress, uint256 _nativeTokenFee, uint256 _erc20TokenFee)
-        ERC721("NFT", "nft")
+        ERC721("NFT Token", "NFT")
         Ownable(initialOwner)
     {
         baseTokenURI = baseURI;
         revealTokenURI = _revealTokenURI;
-        isRevealed = true;
+        isRevealed = false;
         erc20Token = IERC20(erc20TokenAddress);
         nativeTokenFee = _nativeTokenFee;
         erc20TokenFee = _erc20TokenFee;
@@ -51,7 +51,7 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
         }
     }
 
-        // Public mint function with ERC20 token
+    // Public mint function with ERC20 token
     function publicMintWithERC20Token(uint256 _amount) public {
         require(_amount <= 20, "Cannot mint more than 20 tokens at a time");
         require(_nextTokenId + _amount <= MAX_SUPPLY, "Max supply reached");
@@ -126,7 +126,7 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
         override(ERC721, ERC721URIStorage)
         returns (string memory)
     {
-        if (isRevealed) {
+        if (!isRevealed) {
             return revealTokenURI;
         }
         return super.tokenURI(tokenId);
