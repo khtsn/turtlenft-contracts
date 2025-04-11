@@ -4,8 +4,8 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
-const baseURI = "https://baseurl.com/";
-const revealURI = "https://revealurl.com/";
+const baseURI = `https://baseurl${Math.floor(Date.now() / 1000)}.com/`;
+const revealURI = `https://revealurl${Math.floor(Date.now() / 1000)}.com/`;
 
 describe("NFT", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -120,8 +120,9 @@ describe("NFT", function () {
   describe("Base URL Management", function () {
       it("Should allow changing the base URL", async function () {
         const { nft: nft } = await loadFixture(deploySimple);
-        await nft.setBaseURI("https://newbaseurl.com/");
-        expect(await nft.baseTokenURI()).to.equal("https://newbaseurl.com/");
+        let newBaseURL = `https://newbaseurl${Math.floor(Date.now() / 1000)}.com/`
+        await nft.setBaseURI(newBaseURL);
+        expect(await nft.baseTokenURI()).to.equal(newBaseURL);
       });
   });
 
@@ -165,7 +166,7 @@ describe("NFT", function () {
   
       // Check token URI before reveal
       let tokenURI = await nft.tokenURI(tokenId);
-      expect(tokenURI).to.equal("https://revealurl.com/");
+      expect(tokenURI).to.equal(revealURI);
   
       expect(await nft.isRevealed()).to.equal(false);
       // Toggle reveal
@@ -173,7 +174,7 @@ describe("NFT", function () {
   
       // Check token URI after reveal
       tokenURI = await nft.tokenURI(tokenId);
-      expect(tokenURI).to.equal("https://baseurl.com/0");
+      expect(tokenURI).to.equal(`${baseURI}0`);
     });
   
     it("Should toggle reveal state", async function () {

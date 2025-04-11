@@ -71,8 +71,8 @@ contract NFT is ERC721, ERC721URIStorage, ERC721Pausable, Ownable, ERC721Burnabl
         revealTokenURI = _revealTokenURI;
     }
 
-    function _baseURI() internal pure override returns (string memory) {
-        return "https://baseurl.com/";
+    function _baseURI() internal view override returns (string memory) {
+        return baseTokenURI;
     }
 
     function pause() public onlyOwner {
