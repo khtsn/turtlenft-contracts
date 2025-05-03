@@ -51,9 +51,11 @@ module.exports = {
         chainId: 25,
         urls: {
           apiURL:
-            "https://explorer-api.cronos.org/mainnet/api/v1/contract?apikey=" +
+            "https://explorer-api.cronos.org/mainnet/api/v1/hardhat/contract?apikey=" +
             apiKey,
           browserURL: "https://explorer.cronos.org",
+          // apiURL: "https://api.cronoscan.com/api",
+          // browserURL: "https://cronoscan.com/",
         },
       },
       {

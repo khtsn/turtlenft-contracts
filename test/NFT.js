@@ -21,8 +21,8 @@ describe("NFT", function () {
     await token.waitForDeployment();
 
     // Deploy NFT contract
-    const NFT = await ethers.getContractFactory("NFT");
-    const nft = await NFT.deploy(owner.address, baseURI, revealURI, token.target, ethers.parseEther("1"), ethers.parseEther("10"));
+    const NFT = await ethers.getContractFactory("TurtlesNFT");
+    const nft = await NFT.deploy(owner.address, baseURI, revealURI, token.target, ethers.parseEther("1"), ethers.parseEther("10"), 5);
     await nft.waitForDeployment();
 
     return { token, nft, owner, addr1, addr2 };
@@ -61,12 +61,6 @@ describe("NFT", function () {
         expect(await nft.ownerOf(1)).to.equal(addr1.address);
     });
 
-    it("Should not allow minting when paused", async function () {
-      const { nft: nft, addr1 } = await loadFixture(deploySimple);
-        await nft.pause();
-        await expect(nft.adminMint(addr1.address, 1)).to.be.reverted;
-    });
-
     it("Should show token URI", async function () {
       const { nft: nft, owner } = await loadFixture(deploySimple);
       expect(await nft.isRevealed()).to.equal(false);
@@ -99,6 +93,67 @@ describe("NFT", function () {
       await token.connect(addr1).approve(nft.target, ethers.parseEther("1"));
       await expect(nft.connect(addr1).publicMintWithERC20Token(1)).to.be.reverted;
     });
+
+    it("Should fail to mint after reached max mints for ERC20 token", async function() {
+      const { token, nft, owner, addr1, addr2 } = await loadFixture(deploySimple);
+      await token.transfer(addr1.address, ethers.parseEther("100"));
+      await token.connect(addr1).approve(nft.target, ethers.parseEther("100"));
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+      await nft.connect(addr1).publicMintWithERC20Token(2);
+      expect(await nft.balanceOf(addr1.address)).to.equal(5);
+      await expect(nft.connect(addr1).publicMintWithERC20Token(1)).to.be.revertedWith("Cannot mint more with this method");
+
+      await nft.connect(addr1).publicMintWithNativeToken(1, { value: ethers.parseEther("1") });
+      await nft.connect(addr1).publicMintWithNativeToken(1, { value: ethers.parseEther("1") });
+      await nft.connect(addr1).publicMintWithNativeToken(2, { value: ethers.parseEther("2") });
+      expect(await nft.balanceOf(addr1.address)).to.equal(9);
+      await expect(nft.connect(addr1).publicMintWithERC20Token(1)).to.be.revertedWith("Cannot mint more with this method");
+    })
+
+    it("Should update max mints with ERC20 token", async function() {
+      const { token, nft, owner, addr1, addr2 } = await loadFixture(deploySimple);
+      await token.transfer(addr1.address, ethers.parseEther("100"));
+      await token.connect(addr1).approve(nft.target, ethers.parseEther("100"));
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+      await nft.connect(addr1).publicMintWithERC20Token(1);
+      await nft.connect(addr1).publicMintWithERC20Token(2);
+      expect(await nft.balanceOf(addr1.address)).to.equal(5);
+
+      await expect(nft.connect(addr1).publicMintWithERC20Token(1)).to.be.revertedWith("Cannot mint more with this method");
+
+      await nft.updateERC20MaxMints(10);
+      await nft.connect(addr1).publicMintWithERC20Token(5);
+      expect(await nft.balanceOf(addr1.address)).to.equal(10);
+
+      await expect(nft.connect(addr1).publicMintWithERC20Token(1)).to.be.revertedWith("Cannot mint more with this method");
+    })
+
+    it("Should admin mint 500", async function() {
+      const { nft: nft, addr1 } = await loadFixture(deploySimple);
+      await nft.adminMint(addr1.address, 500);
+      expect(await nft.balanceOf(addr1.address)).to.equal(500);
+    })
+    
+    it("Should admin mint 5000", async function() {
+      const { nft: nft, addr1 } = await loadFixture(deploySimple);
+      await nft.adminMint(addr1.address, 5000);
+      expect(await nft.balanceOf(addr1.address)).to.equal(5000);
+    })
+
+    it("Should admin mint 10625", async function() {
+      const { nft: nft, addr1 } = await loadFixture(deploySimple);
+      await nft.adminMint(addr1.address, 10625);
+      expect(await nft.balanceOf(addr1.address)).to.equal(10625);
+    })
+
+    it("Should fail admin mint after max mints", async function() {
+      const { nft: nft, addr1 } = await loadFixture(deploySimple);
+      await nft.adminMint(addr1.address, 10625);
+      await expect(nft.adminMint(addr1.address, 1)).to.be.reverted;
+    })
   });
 
   describe("Burning", function () {
@@ -108,13 +163,6 @@ describe("NFT", function () {
       await nft.burn(0);
       await expect(nft.ownerOf(0)).to.be.reverted;
     });
-  });
-
-  describe("Role Management", function () {
-      it("Should only allow owner to pause minting", async function () {
-        const { nft: nft, addr1 } = await loadFixture(deploySimple);
-        await expect(nft.connect(addr1).pause()).to.be.reverted;
-      });
   });
 
   describe("Base URL Management", function () {
