@@ -1,7 +1,46 @@
-
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
+
+// Test cases for Earning contract:
+// Staking:
+//   - Should transfer Turtle tokens to the contract when staking
+//   - Should fail if user doesn't have any NFTs
+//   - Should fail if user doesn't have enough Turtle tokens
+//   - Should claim rewards when restaking
+//   - Should require Turtle tokens for all NFTs when staking more
+//   - Should fail if user's NFT balance is lower than staked amount
+//
+// Earnings:
+//   - Should not allow claiming before 24 hours
+//   - Should allow claiming after 24 hours
+//   - Should calculate earnings correctly for multiple days
+//   - Should calculate earnings based on NFT count
+//   - Should reset earnings after claiming
+//   - Should fail claiming if user transfers out NFTs
+//
+// Unstaking:
+//   - Withdraw fees transfer to vault when unstaking below 72 hours
+//   - Withdraw fees transfer to vault when unstaking below 24 hours
+//   - Should not charge fee for unstaking after 72 hours
+//   - Should fail unstaking if user transfers out NFTs
+//   - Should pay rewards when unstaking
+//
+// View and fee functions:
+//   - calculateWithdrawalFee returns correct tiers
+//   - calculateEarnings and getStakeInfo for non-staked user
+//   - claim and unstake revert when no NFTs staked
+//
+// Admin functions:
+//   - Should allow owner to decrease required Turtle per NFT
+//   - Should not allow owner to increase required Turtle per NFT
+//   - Should allow owner to decrease daily earning rate
+//   - Should not allow owner to increase daily earning rate
+//   - Should allow owner to set vault address
+//   - Should not allow non-owner to set vault address
+//   - Should not allow non-owner to adjustRequiredTurtle
+//   - Should not allow non-owner to adjustDailyEarningRate
+//   - Should expose contract constants correctly
 
 describe("Earning Contract", function () {
   let Token, token;
@@ -353,13 +392,46 @@ describe("Earning Contract", function () {
     });
   });
 
-  describe("Admin functions", function () {
+  describe("View and fee functions", function () {
+    it("calculateWithdrawalFee returns correct tiers", async function () {
+      const now = await time.latest();
+      // Fee within first 24h
+      let fee = await earning.calculateWithdrawalFee(now - (ONE_DAY - 100));
+      expect(fee).to.equal(ethers.parseEther("10"));
+      // Fee within 24h to 72h
+      fee = await earning.calculateWithdrawalFee(now - (ONE_DAY * 2));
+      expect(fee).to.equal(ethers.parseEther("5"));
+      // No fee after 72h
+      fee = await earning.calculateWithdrawalFee(now - (ONE_DAY * 4));
+      expect(fee).to.equal(0);
+    });
+
+    it("calculateEarnings and getStakeInfo for non-staked user", async function () {
+      const noUser = addr2.address;
+      expect(await earning.calculateEarnings(noUser)).to.equal(0);
+      const info = await earning.getStakeInfo(noUser);
+      expect(info.nftCount).to.equal(0);
+      expect(info.stakedAt).to.equal(0);
+      expect(info.lastClaimAt).to.equal(0);
+    });
+
+    it("claim and unstake revert when no NFTs staked", async function () {
+      await expect(
+        earning.connect(addr2).claim()
+      ).to.be.revertedWith("No staked NFTs");
+      await expect(
+        earning.connect(addr2).unstake({ value: 0 })
+      ).to.be.revertedWith("No staked NFTs");
+    });
+  });
+
+  describe("Utility functions", function () {
     it("Should allow owner to decrease required Turtle per NFT", async function () {
       await earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("30000"));
       expect(await earning.requiredTurtlePerNFT()).to.equal(ethers.parseEther("30000"));
     });
 
-    it("Should not allow owner to increase required Turtle per NFT", async function () {
+    it("Cannot increase required Turtle per NFT", async function () {
       await expect(
         earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("40000"))
       ).to.be.revertedWith("Can only decrease required amount");
@@ -370,10 +442,48 @@ describe("Earning Contract", function () {
       expect(await earning.dailyEarningRate()).to.equal(ethers.parseEther("8"));
     });
 
-    it("Should not allow owner to increase daily earning rate", async function () {
+    it("Cannot increase daily earning rate", async function () {
       await expect(
         earning.connect(owner).adjustDailyEarningRate(ethers.parseEther("12"))
       ).to.be.revertedWith("Can only decrease earning rate");
+    });
+
+    it("Should allow owner to set vault address", async function () {
+      await expect(
+        earning.connect(owner).setVaultAddress(addr1.address)
+      ).to.emit(earning, "VaultAddressUpdated").withArgs(addr1.address);
+      expect(await earning.vaultAddress()).to.equal(addr1.address);
+    });
+
+    it("Error if non-owner sets vault address", async function () {
+      await expect(
+        earning.connect(addr1).setVaultAddress(addr2.address)
+      ).to.be.revertedWithCustomError(earning, "OwnableUnauthorizedAccount").withArgs(
+        addr1.address
+      );
+    });
+
+    it("Error if non-owner sets adjustRequiredTurtle", async function () {
+      await expect(
+        earning.connect(addr1).adjustRequiredTurtle(ethers.parseEther("30000"))
+      ).to.be.revertedWithCustomError(earning, "OwnableUnauthorizedAccount").withArgs(
+        addr1.address
+      );
+    });
+
+    it("Error if non-owner sets adjustDailyEarningRate", async function () {
+      await expect(
+        earning.connect(addr1).adjustDailyEarningRate(ethers.parseEther("8"))
+      ).to.be.revertedWithCustomError(earning, "OwnableUnauthorizedAccount").withArgs(
+        addr1.address
+      );
+    });
+
+    it("Should read contract public constants correctly", async function () {
+      expect(await earning.TURTLE_PER_NFT()).to.equal(ethers.parseEther("35000"));
+      expect(await earning.DAILY_EARNING()).to.equal(ethers.parseEther("10"));
+      expect(await earning.FIRST_24H_FEE()).to.equal(ethers.parseEther("10"));
+      expect(await earning.FIRST_72H_FEE()).to.equal(ethers.parseEther("5"));
     });
   });
 });
