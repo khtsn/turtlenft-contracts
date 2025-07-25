@@ -96,6 +96,7 @@ contract Earning is Ownable, ReentrancyGuard {
     function unstake() external payable nonReentrant {
         StakeInfo storage userStake = stakes[msg.sender];
         require(userStake.nftCount > 0, "No staked NFTs");
+        require(nftContract.balanceOf(msg.sender) >= userStake.nftCount, "Insufficient NFT balance");
 
         uint256 earned = calculateEarnings(msg.sender);
         if (earned > 0) {

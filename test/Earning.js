@@ -310,14 +310,15 @@ describe("Earning Contract", function () {
       expect(newEarnings).to.equal(ethers.parseEther(`${3 * DAILY_EARNING}`));
     });
     
-    it("Should fail claiming if user transfers out NFTs", async function () {
-      // Transfer NFTs to addr2
+    it("Should calculate reduced earnings if user transfers out NFTs", async function () {
+      // Transfer 2 NFTs to addr2, leaving only 1
       await nft.connect(addr1).transferFrom(addr1.address, addr2.address, 0);
       await nft.connect(addr1).transferFrom(addr1.address, addr2.address, 1);
       
       // Advance time by 1 day
       await time.increase(ONE_DAY);
       
+      // Should only earn for 1 NFT (the minimum of staked=3, current=1)
       const earned = await earning.calculateEarnings(addr1.address);
       expect(earned).to.equal(ethers.parseEther("10"));
     });
@@ -368,8 +369,10 @@ describe("Earning Contract", function () {
       await nft.connect(addr1).transferFrom(addr1.address, addr2.address, 0);
       await nft.connect(addr1).transferFrom(addr1.address, addr2.address, 1);
       
-      // Try to unstake
-      await earning.connect(addr1).unstake({ value: ethers.parseEther("10") });
+      // Try to unstake - should fail due to insufficient NFT balance
+      await expect(
+        earning.connect(addr1).unstake({ value: ethers.parseEther("10") })
+      ).to.be.revertedWith("Insufficient NFT balance");
     });
     
     it("Should pay rewards when unstaking", async function () {
@@ -389,6 +392,22 @@ describe("Earning Contract", function () {
       // Check token balance increased
       const finalUserBalance = await token.balanceOf(addr1.address);
       expect(finalUserBalance - initialUserBalance).to.equal(stakedTurtle + expectedEarnings);
+    });
+    
+    it("Should fail unstaking when user has insufficient NFT balance", async function () {
+      // Transfer 2 NFTs away, leaving only 1 NFT but 3 staked
+      await nft.connect(addr1).transferFrom(addr1.address, addr2.address, 0);
+      await nft.connect(addr1).transferFrom(addr1.address, addr2.address, 1);
+      
+      // Verify user now has only 1 NFT but staked 3
+      expect(await nft.balanceOf(addr1.address)).to.equal(1);
+      const [stakedCount] = await earning.stakes(addr1.address);
+      expect(stakedCount).to.equal(3);
+      
+      // Try to unstake - should fail
+      await expect(
+        earning.connect(addr1).unstake({ value: ethers.parseEther("10") })
+      ).to.be.revertedWith("Insufficient NFT balance");
     });
   });
 
