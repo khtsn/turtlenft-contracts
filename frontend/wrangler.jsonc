@@ -2,6 +2,7 @@
     "name": "turtlesnft-staging",
     "compatibility_date": "2025-07-25",
     "assets": {
-        "directory": "./dist"
+        "directory": "./dist",
+        "serve_single_page_app": true
     }
 }
