@@ -19,6 +19,11 @@
       <button @click="fetchStakeInfo">Get Stake Info</button>
       <div v-if="stakeInfo">
         <p>NFTs Staked: {{ stakeInfo.nftCount }}</p>
+        <p>Current NFT Balance: {{ stakeInfo.currentNFTBalance }}</p>
+        <p>Can Stake: {{ stakeInfo.canStake ? 'Yes' : 'No' }}</p>
+        <p v-if="stakeInfo.additionalNFTs > 0">Additional NFTs to Stake: {{ stakeInfo.additionalNFTs }}</p>
+        <p v-if="stakeInfo.tokensNeeded > 0">Turtle Tokens Needed: {{ stakeInfo.tokensNeeded }}</p>
+        <p v-if="stakeInfo.warning">⚠️ {{ stakeInfo.warning }}</p>
         <p>Staked At: {{ stakeInfo.stakedAt }}</p>
         <p>Last Claim At: {{ stakeInfo.lastClaimAt }}</p>
         <p>Withdrawal Fee: {{ stakeInfo.withdrawalFee }}</p>
@@ -80,10 +85,36 @@ async function fetchRequiredTurtle() {
 async function fetchStakeInfo() {
   if (!account.value) return alert('Connect wallet first')
   const contract = getEarningContract()
+  const nftContract = getNFTContract()
+  
   const [nftCount, stakedAt, lastClaimAt] = await contract.getStakeInfo(account.value)
+  const currentNFTBalance = await nftContract.balanceOf(account.value)
+  const requiredPerNFT = await contract.requiredTurtlePerNFT()
   const fee = await contract.calculateWithdrawalFee(stakedAt)
+  
+  const stakedCount = nftCount.toNumber()
+  const nftBalance = currentNFTBalance.toNumber()
+  
+  let canStake = false
+  let additionalNFTs = 0
+  let tokensNeeded = 0
+  let warning = ''
+  
+  if (stakedCount > nftBalance) {
+    warning = `You have ${stakedCount} NFTs staked but only ${nftBalance} NFTs in wallet. Acquire more NFTs to stake.`
+  } else if (nftBalance > stakedCount) {
+    canStake = true
+    additionalNFTs = nftBalance - stakedCount
+    tokensNeeded = parseFloat(ethers.utils.formatEther(requiredPerNFT.mul(additionalNFTs)))
+  }
+  
   stakeInfo.value = {
-    nftCount: nftCount.toNumber(),
+    nftCount: stakedCount,
+    currentNFTBalance: nftBalance,
+    canStake,
+    additionalNFTs,
+    tokensNeeded,
+    warning,
     stakedAtUnix: stakedAt.toNumber(),
     lastClaimAtUnix: lastClaimAt.toNumber(),
     stakedAt: new Date(stakedAt.toNumber() * 1000).toLocaleString(),
@@ -99,10 +130,25 @@ async function stakeNFTs() {
   const { getTokenContract } = await import('../services/contractService')
   const tokenContract = getTokenContract()
   
-  // Get NFT balance and required turtle per NFT
+  // Get current NFT balance and staked count
   const nftBalance = await nftContract.balanceOf(account.value)
+  const [currentStakedCount] = await contract.getStakeInfo(account.value)
+  
+  // Check if staked amount is larger than current NFT balance
+  if (currentStakedCount.gt(nftBalance)) {
+    return alert(`Cannot stake: You have ${currentStakedCount.toString()} NFTs staked but only ${nftBalance.toString()} NFTs in your wallet. Please acquire more NFTs before staking.`)
+  }
+  
+  const additionalNFTs = nftBalance.sub(currentStakedCount)
+  
+  // Check if there are additional NFTs to stake
+  if (additionalNFTs.eq(0)) {
+    return alert('No additional NFTs to stake. Your current NFT balance matches your staked amount.')
+  }
+  
+  // Calculate approval amount for additional NFTs only
   const requiredPerNFT = await contract.requiredTurtlePerNFT()
-  const exactAmount = nftBalance.mul(requiredPerNFT)
+  const exactAmount = additionalNFTs.mul(requiredPerNFT)
   
   // Set exact approval amount for turtle tokens
   const approveTx = await tokenContract.approve(contract.address, exactAmount)
@@ -116,6 +162,12 @@ async function stakeNFTs() {
 async function unstakeNFTs() {
   if (!account.value) return alert('Connect wallet first')
   if (!stakeInfo.value) await fetchStakeInfo()
+  
+  // Check if user has any stakes
+  if (!stakeInfo.value || stakeInfo.value.nftCount === 0) {
+    return alert('No NFTs staked. You must stake NFTs before you can unstake them.')
+  }
+  
   const contract = getEarningContract()
   const fee = await contract.calculateWithdrawalFee(stakeInfo.value.stakedAtUnix)
   const tx = await contract.unstake({ value: fee })
