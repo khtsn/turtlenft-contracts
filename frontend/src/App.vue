@@ -6,6 +6,8 @@
       <router-link to="/nft">NFT</router-link>
       |
       <router-link to="/earning">Earning</router-link>
+      |
+      <router-link to="/faucet">Faucet</router-link>
     </nav>
     <router-view />
   </div>
