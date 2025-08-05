@@ -445,26 +445,44 @@ describe("Earning Contract", function () {
   });
 
   describe("Utility functions", function () {
-    it("Should allow owner to decrease required Turtle per NFT", async function () {
+    it("Should allow owner to adjust required Turtle per NFT (decrease)", async function () {
       await earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("30000"));
       expect(await earning.requiredTurtlePerNFT()).to.equal(ethers.parseEther("30000"));
     });
 
-    it("Cannot increase required Turtle per NFT", async function () {
-      await expect(
-        earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("40000"))
-      ).to.be.revertedWith("Can only decrease required amount");
+    it("Should allow owner to adjust required Turtle per NFT (increase)", async function () {
+      await earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("40000"));
+      expect(await earning.requiredTurtlePerNFT()).to.equal(ethers.parseEther("40000"));
     });
 
-    it("Should allow owner to decrease daily earning rate", async function () {
+    it("Should allow setting minimum required Turtle (10000)", async function () {
+      await earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("10000"));
+      expect(await earning.requiredTurtlePerNFT()).to.equal(ethers.parseEther("10000"));
+    });
+
+    it("Cannot set required Turtle below 10000", async function () {
+      await expect(
+        earning.connect(owner).adjustRequiredTurtle(ethers.parseEther("9999"))
+      ).to.be.revertedWith("Minimum 10000 tokens required");
+    });
+
+    it("Should allow owner to adjust daily earning rate within range", async function () {
       await earning.connect(owner).adjustDailyEarningRate(ethers.parseEther("8"));
       expect(await earning.dailyEarningRate()).to.equal(ethers.parseEther("8"));
+      
+      await earning.connect(owner).adjustDailyEarningRate(ethers.parseEther("0"));
+      expect(await earning.dailyEarningRate()).to.equal(ethers.parseEther("0"));
     });
 
-    it("Cannot increase daily earning rate", async function () {
+    it("Should allow setting maximum daily earning rate (10)", async function () {
+      await earning.connect(owner).adjustDailyEarningRate(ethers.parseEther("10"));
+      expect(await earning.dailyEarningRate()).to.equal(ethers.parseEther("10"));
+    });
+
+    it("Cannot set daily earning rate above 10", async function () {
       await expect(
-        earning.connect(owner).adjustDailyEarningRate(ethers.parseEther("12"))
-      ).to.be.revertedWith("Can only decrease earning rate");
+        earning.connect(owner).adjustDailyEarningRate(ethers.parseEther("11"))
+      ).to.be.revertedWith("Rate cannot exceed 10");
     });
 
     it("Should allow owner to set vault address", async function () {

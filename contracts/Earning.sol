@@ -192,21 +192,21 @@ contract Earning is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Adjust the required Turtle tokens per NFT (can only decrease)
+     * @dev Adjust the required Turtle tokens per NFT (minimum 10000)
      * @param newAmount New amount of Turtle tokens required per NFT
      */
     function adjustRequiredTurtle(uint256 newAmount) external onlyOwner {
-        require(newAmount < requiredTurtlePerNFT, "Can only decrease required amount");
+        require(newAmount >= 10000 ether, "Minimum 10000 tokens required");
         requiredTurtlePerNFT = newAmount;
         emit RequiredTurtleAdjusted(newAmount);
     }
 
     /**
-     * @dev Adjust the daily earning rate (can only decrease)
+     * @dev Adjust the daily earning rate (0-10 range)
      * @param newRate New daily earning rate
      */
     function adjustDailyEarningRate(uint256 newRate) external onlyOwner {
-        require(newRate < dailyEarningRate, "Can only decrease earning rate");
+        require(newRate <= 10 ether, "Rate cannot exceed 10");
         dailyEarningRate = newRate;
         emit DailyEarningAdjusted(newRate);
     }
