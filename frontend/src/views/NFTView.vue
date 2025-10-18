@@ -20,6 +20,19 @@
       <button @click="getTotalSupply">Get Total Supply</button>
       <p v-if="totalSupply !== null">Total Supply: {{ totalSupply }}</p>
     </div>
+
+    <div>
+      <button @click="getContractInfo">Get Contract Info</button>
+      <div v-if="contractInfo">
+        <p><strong>Owner:</strong> {{ contractInfo.owner }}</p>
+        <p><strong>Base URI:</strong> {{ contractInfo.baseURI }}</p>
+        <p><strong>Reveal URI:</strong> {{ contractInfo.revealURI }}</p>
+        <p><strong>ERC20 Token:</strong> {{ contractInfo.erc20Token }}</p>
+        <p><strong>Native Fee:</strong> {{ contractInfo.nativeFee }} CRO</p>
+        <p><strong>ERC20 Fee:</strong> {{ contractInfo.erc20Fee }} tokens</p>
+        <p><strong>Max ERC20 Mints:</strong> {{ contractInfo.maxERC20Mints }}</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -33,6 +46,7 @@ const totalSupply = ref(null)
 const mintWallet = ref('')
 const mintAmount = ref(1)
 const publicMintAmount = ref(1)
+const contractInfo = ref(null)
 const contractAddress = import.meta.env.VITE_NFT_ADDRESS
 
 async function connectWallet() {
@@ -80,6 +94,32 @@ async function getTotalSupply() {
   const contract = getNFTContract()
   const supply = await contract.totalSupply()
   totalSupply.value = supply.toString()
+}
+
+async function getContractInfo() {
+  try {
+    const contract = getNFTContract()
+    
+    const owner = await contract.owner()
+    const baseURI = await contract.baseTokenURI()
+    const revealURI = await contract.revealTokenURI()
+    const erc20Token = await contract.erc20Token()
+    const nativeFee = await contract.nativeTokenFee()
+    const erc20Fee = await contract.erc20TokenFee()
+    const maxERC20Mints = await contract.maxERC20Mints()
+    
+    contractInfo.value = {
+      owner,
+      baseURI,
+      revealURI,
+      erc20Token,
+      nativeFee: ethers.utils.formatEther(nativeFee),
+      erc20Fee: erc20Fee.toString(),
+      maxERC20Mints: maxERC20Mints.toString()
+    }
+  } catch (error) {
+    alert('Error fetching contract info: ' + error.message)
+  }
 }
 </script>
 
