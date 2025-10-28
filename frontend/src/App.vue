@@ -8,6 +8,8 @@
       <router-link to="/earning">Earning</router-link>
       |
       <router-link to="/faucet">Faucet</router-link>
+      |
+      <router-link to="/vault">Vault</router-link>
     </nav>
     <router-view />
   </div>

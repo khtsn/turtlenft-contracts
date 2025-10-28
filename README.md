@@ -5,6 +5,8 @@
     * ERC20 smart contract
     * ERC721 smart contract
 * Earning contract
+* Faucet contract
+* Turtle Redemption Vault contract
 * Coverage test cases for happy paths
 
 ## ERC-721 Features
@@ -37,8 +39,8 @@
     * No rewards are earned for periods less than 24 hours
 
 * Admin Functions:
-    * Ability to decrease (but not increase) the required Turtle tokens per NFT
-    * Ability to decrease (but not increase) the daily earning rate
+    * Ability to adjust required Turtle tokens per NFT (minimum 10,000)
+    * Ability to adjust daily earning rate (0-10 range)
 
 ## Why are `stakes` and `stakedTurtleTokens` separate mappings?
 
@@ -86,3 +88,26 @@ Treating them as distinct entities in the code reflects their distinct roles in 
 | **Concept**   | The staking "agreement" or "position".    | The financial "collateral".         | **Separation of Concerns**: Keeps time-based logic separate from fund management. |
 
 While you could combine them into a single struct, the current design is generally considered a better practice for smart contracts due to the significant benefits in gas optimization and code maintainability.
+
+## Faucet Contract Features
+* 5-minute cooldown between claims
+* Default reward: 35,000 tokens per claim
+* Owner can adjust reward amount
+* Owner can withdraw tokens from faucet
+* Tracks last claim time per wallet
+
+## Turtle Redemption Vault Features
+* NFT-to-TURTLE exchange system
+* Deposit NFTs to receive TURTLE tokens based on pool ratio
+* Swap TURTLE tokens for NFTs (with fee)
+* Purchase NFTs directly with CRO
+* Owner can adjust swap and purchase fees
+* Owner can withdraw collected CRO fees
+
+## Frontend Interface
+The project includes a Vue.js frontend with views for:
+* **Token**: ERC20 token interactions and balance checking
+* **NFT**: Minting (admin and public), contract information display
+* **Earning**: Staking, unstaking, claiming rewards, stake management
+* **Faucet**: Token claiming with cooldown, owner fee management
+* **Vault**: NFT deposits, TURTLE swaps, CRO purchases, vault statistics

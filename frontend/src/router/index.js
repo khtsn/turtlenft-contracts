@@ -3,6 +3,7 @@ import TokenView from '../views/TokenView.vue'
 import NFTView from '../views/NFTView.vue'
 import EarningView from '../views/EarningView.vue'
 import FaucetView from '../views/FaucetView.vue'
+import VaultView from '../views/VaultView.vue'
 
 const routes = [
   {
@@ -28,6 +29,11 @@ const routes = [
     path: '/faucet',
     name: 'Faucet',
     component: FaucetView
+  },
+  {
+    path: '/vault',
+    name: 'Vault',
+    component: VaultView
   }
 ]
 
