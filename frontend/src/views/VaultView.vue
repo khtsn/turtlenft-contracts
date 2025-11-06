@@ -5,6 +5,23 @@
     <button @click="connectWallet">Connect Wallet</button>
     <p v-if="account">Connected: {{ account }}</p>
 
+    <div v-if="account">
+      <h3>Your NFTs</h3>
+      <button @click="loadUserNFTs">Load My NFTs</button>
+      <div v-if="userNFTs.length > 0">
+        <p><strong>You own {{ userNFTs.length }} NFT(s)</strong></p>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0;">
+          <div v-for="tokenId in userNFTs" :key="tokenId" 
+               @click="toggleNFTSelection(tokenId)"
+               :class="{ selected: selectedNFTs.includes(tokenId) }"
+               class="nft-item">
+            #{{ tokenId }}
+          </div>
+        </div>
+        <p v-if="selectedNFTs.length > 0"><strong>Selected:</strong> {{ selectedNFTs.join(', ') }}</p>
+      </div>
+    </div>
+
     <div>
       <button @click="getVaultInfo">Get Vault Info</button>
       <div v-if="vaultInfo">
@@ -18,9 +35,15 @@
 
     <div>
       <h3>Deposit NFTs</h3>
-      <input v-model="depositAmount" type="number" placeholder="Amount" />
-      <button @click="depositByCount">Deposit by Count</button>
-      <button @click="depositAllOwned">Deposit All Owned</button>
+      <div>
+        <input v-model="depositAmount" type="number" placeholder="Amount" />
+        <button @click="depositByCount">Deposit by Count</button>
+        <button @click="depositAllOwned">Deposit All Owned</button>
+      </div>
+      <div v-if="selectedNFTs.length > 0">
+        <button @click="depositByTokenIds">Deposit Selected ({{ selectedNFTs.length }})</button>
+        <button @click="clearSelection">Clear Selection</button>
+      </div>
     </div>
 
     <div>
@@ -55,6 +78,8 @@ import { getNFTContract } from '../services/contractService'
 
 const account = ref('')
 const vaultInfo = ref(null)
+const userNFTs = ref([])
+const selectedNFTs = ref([])
 const depositAmount = ref(1)
 const swapAmount = ref(1)
 const isOwner = ref(false)
@@ -62,6 +87,9 @@ const newSwapFee = ref('')
 const newPurchaseFee = ref('')
 const withdrawAmount = ref('')
 const contractAddress = import.meta.env.VITE_VAULT_ADDRESS
+const nftContractAddress = import.meta.env.VITE_NFT_ADDRESS
+const chainId = import.meta.env.VITE_CHAIN_ID || 25
+const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
 async function connectWallet() {
   if (window.ethereum) {
@@ -69,9 +97,35 @@ async function connectWallet() {
     const provider = new ethers.providers.Web3Provider(window.ethereum)
     account.value = await provider.getSigner().getAddress()
     await checkOwnership()
+    await loadUserNFTs()
   } else {
     alert('Please install MetaMask!')
   }
+}
+
+async function loadUserNFTs() {
+  if (!account.value) return
+  try {
+    const response = await fetch(`${apiBase}/${nftContractAddress}/${chainId}/tokens?owner=${account.value}`)
+    const data = await response.json()
+    userNFTs.value = data.tokens || []
+    selectedNFTs.value = []
+  } catch (error) {
+    console.error('Error loading user NFTs:', error)
+  }
+}
+
+function toggleNFTSelection(tokenId) {
+  const index = selectedNFTs.value.indexOf(tokenId)
+  if (index > -1) {
+    selectedNFTs.value.splice(index, 1)
+  } else {
+    selectedNFTs.value.push(tokenId)
+  }
+}
+
+function clearSelection() {
+  selectedNFTs.value = []
 }
 
 function getVaultContract() {
@@ -87,6 +141,7 @@ function getVaultContract() {
     "function purchaseFeeCRO() external view returns (uint256)",
     "function owner() external view returns (address)",
     "function depositByCount(uint256 amount) external",
+    "function depositByIds(uint256[] calldata tokenIds) external",
     "function depositAllOwned() external",
     "function swapForNFTs(uint256 amount) external",
     "function purchaseNFTsWithCRO(uint256 amount) external payable",
@@ -144,6 +199,31 @@ async function depositByCount() {
     await tx.wait()
     alert(`${depositAmount.value} NFT(s) deposited successfully`)
     await getVaultInfo()
+    await loadUserNFTs()
+  } catch (error) {
+    alert('Deposit failed: ' + error.message)
+  }
+}
+
+async function depositByTokenIds() {
+  if (!account.value) return alert('Connect wallet first')
+  if (selectedNFTs.value.length === 0) return alert('Select NFTs first')
+  try {
+    const contract = getVaultContract()
+    const nftContract = getNFTContract()
+    
+    // Check if approval is already set
+    const isApproved = await nftContract.isApprovedForAll(account.value, contractAddress)
+    if (!isApproved) {
+      const approveTx = await nftContract.setApprovalForAll(contractAddress, true)
+      await approveTx.wait()
+    }
+    
+    const tx = await contract.depositByIds(selectedNFTs.value)
+    await tx.wait()
+    alert(`${selectedNFTs.value.length} NFT(s) deposited successfully`)
+    await getVaultInfo()
+    await loadUserNFTs()
   } catch (error) {
     alert('Deposit failed: ' + error.message)
   }
@@ -166,6 +246,7 @@ async function depositAllOwned() {
     await tx.wait()
     alert('All NFTs deposited successfully')
     await getVaultInfo()
+    await loadUserNFTs()
   } catch (error) {
     alert('Deposit failed: ' + error.message)
   }
@@ -259,5 +340,23 @@ input {
 h3 {
   margin-top: 2rem;
   color: #666;
+}
+
+.nft-item {
+  padding: 0.5rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  background: #f9f9f9;
+}
+
+.nft-item:hover {
+  border-color: #999;
+}
+
+.nft-item.selected {
+  border-color: #007bff;
+  background: #e7f3ff;
 }
 </style>
