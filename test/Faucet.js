@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
-describe.only("Faucet Contract", function () {
+describe("Faucet Contract", function () {
   let Token, token;
   let Faucet, faucet;
   let owner, addr1, addr2;

@@ -8,26 +8,28 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
-    IERC721A public constant NFT_CONTRACT = IERC721A(0x5848335Bbd8e10725F5A35d97A8e252eFdA9Be1a);
-    IERC20 public constant TURTLE_TOKEN = IERC20(0x2bAA455e573df4019B11859231Dd9e425D885293); 
+    IERC721A public immutable NFT_CONTRACT;
+    IERC20 public immutable TURTLE_TOKEN;
     uint256 public constant TOTAL_NFT_SUPPLY = 10625;
+    uint256 public constant MAX_BATCH_SIZE = 20;
     uint256 public swapFeeTurtle = 100 * 1e18; // 100 TURTLE default
     uint256 public purchaseFeeCRO = 10 * 1e18; // 10 CRO default
 
     uint256[] public vaultNFTs;
     mapping(uint256 => uint256) public nftToIndex;
+    mapping(uint256 => bool) private _processedTokens;
 
-    constructor() Ownable(0xea634Da88a37f60a8A64156b3997f3C3389fd91F) {}
+    constructor(address _nftContract, address _turtleToken, address _owner) Ownable(_owner) {
+        NFT_CONTRACT = IERC721A(_nftContract);
+        TURTLE_TOKEN = IERC20(_turtleToken);
+    }
 
     event NFTDepositedBatch(address indexed user, uint256[] tokenIds, uint256 turtlePaid);
     event NFTSwapped(address indexed user, uint256[] tokenIds, uint256 turtlePaid, uint256 feeCollected);
     event NFTPurchasedWithCRO(address indexed user, uint256[] tokenIds, uint256 croPaid);
     event SwapFeeTurtleChanged(uint256 oldFee, uint256 newFee);
     event PurchaseFeeCROChanged(uint256 oldFee, uint256 newFee);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event CROWithdrawn(address indexed owner, uint256 amount);
-
-
 
     function onERC721Received(
         address,
@@ -38,16 +40,8 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
         return IERC721Receiver.onERC721Received.selector;
     }
 
-    function turtlePoolBalance() public view returns (uint256) {
-        return TURTLE_TOKEN.balanceOf(address(this));
-    }
-
     function turtlePerNFT() public view returns (uint256) {
         return TURTLE_TOKEN.balanceOf(address(this)) / TOTAL_NFT_SUPPLY;
-    }
-
-    function vaultNFTCount() public view returns (uint256) {
-        return vaultNFTs.length;
     }
 
     function getVaultNFTs() external view returns (uint256[] memory) {
@@ -56,17 +50,27 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
 
     function depositByIds(uint256[] calldata tokenIds) external nonReentrant {
         uint256 n = tokenIds.length;
-        require(n > 0 && n <= 20, "Invalid amount: 1-20 NFTs only");
+        require(n > 0 && n <= MAX_BATCH_SIZE, "Invalid amount: 1-20 NFTs only");
 
-        uint256 perNFT = turtlePerNFT();
+        uint256 turtleBalance = TURTLE_TOKEN.balanceOf(address(this));
+        uint256 perNFT = turtleBalance / TOTAL_NFT_SUPPLY;
         require(perNFT > 0, "Pool empty");
+
+        // Validate all tokens first
+        for (uint256 i = 0; i < n; i++) {
+            require(!_processedTokens[tokenIds[i]], "Duplicate token");
+            require(NFT_CONTRACT.ownerOf(tokenIds[i]) == msg.sender, "Not token owner");
+            _processedTokens[tokenIds[i]] = true;
+        }
 
         uint256 totalPay = perNFT * n;
 
+        // Execute transfers
         for (uint256 i = 0; i < n; i++) {
             NFT_CONTRACT.safeTransferFrom(msg.sender, address(this), tokenIds[i]);
             nftToIndex[tokenIds[i]] = vaultNFTs.length;
             vaultNFTs.push(tokenIds[i]);
+            _processedTokens[tokenIds[i]] = false;
         }
 
         bool ok = TURTLE_TOKEN.transfer(msg.sender, totalPay);
@@ -77,47 +81,60 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
 
     function swapForNFTs(uint256[] calldata tokenIds) external nonReentrant {
         uint256 n = tokenIds.length;
-        require(n > 0 && n <= 20, "Invalid amount: 1-20 NFTs only");
+        require(n > 0 && n <= MAX_BATCH_SIZE, "Invalid amount: 1-20 NFTs only");
 
-        uint256 perNFT = turtlePerNFT();
+        uint256 turtleBalance = TURTLE_TOKEN.balanceOf(address(this));
+        uint256 perNFT = turtleBalance / TOTAL_NFT_SUPPLY;
         require(perNFT > 0, "Pool empty");
 
         uint256 costPer = perNFT + swapFeeTurtle;
         uint256 totalCost = costPer * n;
 
+        // Validate all tokens first
         for (uint256 i = 0; i < n; i++) {
+            require(!_processedTokens[tokenIds[i]], "Duplicate token");
             require(nftToIndex[tokenIds[i]] < vaultNFTs.length && vaultNFTs[nftToIndex[tokenIds[i]]] == tokenIds[i], "NFT not in vault");
+            _processedTokens[tokenIds[i]] = true;
         }
 
         bool ok = TURTLE_TOKEN.transferFrom(msg.sender, address(this), totalCost);
         require(ok, "Turtle transfer failed");
 
+        // Execute transfers
         for (uint256 i = 0; i < n; i++) {
             _removeNFTFromVault(tokenIds[i]);
             NFT_CONTRACT.safeTransferFrom(address(this), msg.sender, tokenIds[i]);
+            _processedTokens[tokenIds[i]] = false;
         }
 
-        emit NFTSwapped(msg.sender, tokenIds, totalCost - (perNFT * n), swapFeeTurtle * n);
+        emit NFTSwapped(msg.sender, tokenIds, totalCost, swapFeeTurtle * n);
     }
 
     function purchaseNFTsWithCRO(uint256[] calldata tokenIds) external payable nonReentrant {
         uint256 n = tokenIds.length;
-        require(n > 0 && n <= 20, "Invalid amount: 1-20 NFTs only");
+        require(n > 0 && n <= MAX_BATCH_SIZE, "Invalid amount: 1-20 NFTs only");
 
         uint256 totalPrice = purchaseFeeCRO * n;
         require(msg.value >= totalPrice, "Insufficient CRO");
 
+        // Validate all tokens first
         for (uint256 i = 0; i < n; i++) {
+            require(!_processedTokens[tokenIds[i]], "Duplicate token");
             require(nftToIndex[tokenIds[i]] < vaultNFTs.length && vaultNFTs[nftToIndex[tokenIds[i]]] == tokenIds[i], "NFT not in vault");
+            _processedTokens[tokenIds[i]] = true;
         }
 
+        // Execute transfers
         for (uint256 i = 0; i < n; i++) {
             _removeNFTFromVault(tokenIds[i]);
             NFT_CONTRACT.safeTransferFrom(address(this), msg.sender, tokenIds[i]);
+            _processedTokens[tokenIds[i]] = false;
         }
 
+        // Safe refund using call
         if (msg.value > totalPrice) {
-            payable(msg.sender).transfer(msg.value - totalPrice);
+            (bool success, ) = payable(msg.sender).call{value: msg.value - totalPrice}("");
+            require(success, "Refund failed");
         }
 
         emit NFTPurchasedWithCRO(msg.sender, tokenIds, totalPrice);
@@ -135,13 +152,9 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
 
     function withdrawCRO(uint256 amount) external onlyOwner nonReentrant {
         require(address(this).balance >= amount, "Insufficient CRO");
-        payable(owner()).transfer(amount);
+        (bool success, ) = payable(owner()).call{value: amount}("");
+        require(success, "Transfer failed");
         emit CROWithdrawn(owner(), amount);
-    }
-
-    function transferOwnership(address newOwner) public override onlyOwner {
-        require(newOwner != address(0), "Zero address");
-        super.transferOwnership(newOwner);
     }
 
     function _removeNFTFromVault(uint256 tokenId) private {
