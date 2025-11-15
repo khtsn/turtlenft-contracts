@@ -209,7 +209,7 @@ async function connectWallet() {
 async function loadUserNFTs() {
   if (!account.value) return
   try {
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+    const apiBaseUrl = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
     const apiUrl = `${apiBaseUrl}/api/${nftContractAddress}/${chainId}/tokens?owner=${account.value}`
     
     const response = await fetch(apiUrl)
