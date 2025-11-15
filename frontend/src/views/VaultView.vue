@@ -25,6 +25,7 @@
 
     <div v-if="account">
       <h3>Your NFTs ({{ userNFTs.length }})</h3>
+      <p v-if="contractInfo" style="font-size: 12px; color: #666; margin: 5px 0;">Last synced: {{ new Date(contractInfo.last_fetch).toLocaleString() }}</p>
       <div v-if="userNFTs.length > 0" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin: 20px 0;">
         <div 
           v-for="tokenId in userNFTs" 
@@ -43,7 +44,8 @@
     </div>
 
     <div v-if="account">
-      <h3>Vault NFTs ({{ vaultNFTs.length }})</h3>
+      <h3>Vault NFTs ({{ vaultNFTs.length }}) <button @click="loadVaultNFTs" style="margin-left: 10px; font-size: 12px;">Refresh</button></h3>
+      <p v-if="lastVaultNFTsFetch" style="font-size: 12px; color: #666; margin: 5px 0;">Last synced: {{ lastVaultNFTsFetch }}</p>
       <div v-if="vaultNFTs.length > 0" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin: 20px 0;">
         <div 
           v-for="tokenId in vaultNFTs" 
@@ -63,6 +65,9 @@
 
     <div v-if="account">
       <h3>Deposit NFTs</h3>
+      <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <p style="margin: 0; color: #856404; font-weight: bold;">⚠️ WARNING: You will permanently lose ownership of selected NFTs. This transaction is irreversible. You will receive {{ vaultInfo?.perNFT || '0' }} TURTLE tokens per NFT deposited.</p>
+      </div>
       <div style="margin: 10px 0;">
         <button @click="selectBatch(userNFTs, selectedNFTs, 0, 10)" style="margin-right: 5px;">Select First 10</button>
         <button @click="selectBatch(userNFTs, selectedNFTs, 10, 20)" style="margin-right: 5px;">Select Next 10</button>
@@ -135,6 +140,8 @@ const isOwner = ref(false)
 const newSwapFee = ref('')
 const newPurchaseFee = ref('')
 const withdrawAmount = ref('')
+const lastVaultNFTsFetch = ref(null)
+const contractInfo = ref(null)
 
 const contractAddress = import.meta.env.VITE_VAULT_ADDRESS
 const nftContractAddress = import.meta.env.VITE_NFT_ADDRESS
@@ -197,12 +204,24 @@ async function connectWallet() {
     const provider = new ethers.providers.Web3Provider(window.ethereum)
     const signer = provider.getSigner()
     account.value = await signer.getAddress()
+    await getContractInfo()
     await checkOwnership()
     await loadUserNFTs()
     await loadVaultNFTs()
     await getVaultInfo()
   } else {
     alert('Please install MetaMask!')
+  }
+}
+
+async function getContractInfo() {
+  try {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
+    const response = await fetch(`${apiBaseUrl}/api/contracts/${nftContractAddress}/${chainId}`)
+    const data = await response.json()
+    contractInfo.value = data
+  } catch (error) {
+    console.error('Error loading contract info:', error)
   }
 }
 
@@ -230,6 +249,7 @@ async function loadVaultNFTs() {
     const tokens = await contract.getVaultNFTs()
     vaultNFTs.value = tokens.map(t => t.toString())
     selectedVaultNFTs.value = []
+    lastVaultNFTsFetch.value = new Date().toLocaleString()
     
     // Remove vault NFTs from user's collection to handle API delays
     vaultNFTs.value.forEach(tokenId => {
