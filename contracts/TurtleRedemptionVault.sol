@@ -25,7 +25,7 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
     }
 
     event NFTDepositedBatch(address indexed user, uint256[] tokenIds, uint256 turtlePaid);
-    event NFTSwapped(address indexed user, uint256[] tokenIds, uint256 turtlePaid, uint256 feeCollected);
+    event NFTSwapped(address indexed user, uint256[] userTokenIds, uint256[] vaultTokenIds, uint256 turtlePaid, uint256 feeCollected);
     event NFTPurchasedWithCRO(address indexed user, uint256[] tokenIds, uint256 croPaid);
     event SwapFeeTurtleChanged(uint256 oldFee, uint256 newFee);
     event PurchaseFeeCROChanged(uint256 oldFee, uint256 newFee);
@@ -79,35 +79,44 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
         emit NFTDepositedBatch(msg.sender, tokenIds, totalPay);
     }
 
-    function swapForNFTs(uint256[] calldata tokenIds) external nonReentrant {
-        uint256 n = tokenIds.length;
+    function swapForNFTs(uint256[] calldata userTokenIds, uint256[] calldata vaultTokenIds) external nonReentrant {
+        uint256 n = userTokenIds.length;
         require(n > 0 && n <= MAX_BATCH_SIZE, "Invalid amount: 1-20 NFTs only");
+        require(n == vaultTokenIds.length, "Token arrays must be same length");
 
-        uint256 turtleBalance = TURTLE_TOKEN.balanceOf(address(this));
-        uint256 perNFT = turtleBalance / TOTAL_NFT_SUPPLY;
-        require(perNFT > 0, "Pool empty");
+        uint256 totalFee = swapFeeTurtle * n;
 
-        uint256 costPer = perNFT + swapFeeTurtle;
-        uint256 totalCost = costPer * n;
-
-        // Validate all tokens first
+        // Validate user tokens
         for (uint256 i = 0; i < n; i++) {
-            require(!_processedTokens[tokenIds[i]], "Duplicate token");
-            require(nftToIndex[tokenIds[i]] < vaultNFTs.length && vaultNFTs[nftToIndex[tokenIds[i]]] == tokenIds[i], "NFT not in vault");
-            _processedTokens[tokenIds[i]] = true;
+            require(!_processedTokens[userTokenIds[i]], "Duplicate user token");
+            require(NFT_CONTRACT.ownerOf(userTokenIds[i]) == msg.sender, "Not token owner");
+            _processedTokens[userTokenIds[i]] = true;
         }
 
-        bool ok = TURTLE_TOKEN.transferFrom(msg.sender, address(this), totalCost);
+        // Validate vault tokens
+        for (uint256 i = 0; i < n; i++) {
+            require(!_processedTokens[vaultTokenIds[i]], "Duplicate vault token");
+            require(nftToIndex[vaultTokenIds[i]] < vaultNFTs.length && vaultNFTs[nftToIndex[vaultTokenIds[i]]] == vaultTokenIds[i], "NFT not in vault");
+            _processedTokens[vaultTokenIds[i]] = true;
+        }
+
+        bool ok = TURTLE_TOKEN.transferFrom(msg.sender, address(this), totalFee);
         require(ok, "Turtle transfer failed");
 
-        // Execute transfers
+        // Execute swaps
         for (uint256 i = 0; i < n; i++) {
-            _removeNFTFromVault(tokenIds[i]);
-            NFT_CONTRACT.safeTransferFrom(address(this), msg.sender, tokenIds[i]);
-            _processedTokens[tokenIds[i]] = false;
+            NFT_CONTRACT.safeTransferFrom(msg.sender, address(this), userTokenIds[i]);
+            nftToIndex[userTokenIds[i]] = vaultNFTs.length;
+            vaultNFTs.push(userTokenIds[i]);
+            
+            _removeNFTFromVault(vaultTokenIds[i]);
+            NFT_CONTRACT.safeTransferFrom(address(this), msg.sender, vaultTokenIds[i]);
+            
+            _processedTokens[userTokenIds[i]] = false;
+            _processedTokens[vaultTokenIds[i]] = false;
         }
 
-        emit NFTSwapped(msg.sender, tokenIds, totalCost, swapFeeTurtle * n);
+        emit NFTSwapped(msg.sender, userTokenIds, vaultTokenIds, totalFee, totalFee);
     }
 
     function purchaseNFTsWithCRO(uint256[] calldata tokenIds) external payable nonReentrant {
@@ -150,8 +159,9 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
         purchaseFeeCRO = _newFee;
     }
 
-    function withdrawCRO(uint256 amount) external onlyOwner nonReentrant {
-        require(address(this).balance >= amount, "Insufficient CRO");
+    function withdrawCRO() external onlyOwner nonReentrant {
+        uint256 amount = address(this).balance;
+        require(amount > 0, "No CRO to withdraw");
         (bool success, ) = payable(owner()).call{value: amount}("");
         require(success, "Transfer failed");
         emit CROWithdrawn(owner(), amount);

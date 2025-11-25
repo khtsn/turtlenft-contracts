@@ -84,27 +84,50 @@
     </div>
 
     <div v-if="account">
-      <h3>Get NFTs from Vault</h3>
+      <h3>Swap NFTs (1:1 Exchange)</h3>
+      <div style="background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <p style="margin: 0; color: #1565c0; font-weight: bold;">ℹ️ Select equal number of NFTs from both your collection and vault to perform a 1:1 swap. You pay {{ vaultInfo?.swapFee || '0' }} TURTLE per NFT as swap fee.</p>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 10px 0;">
+        <div>
+          <h4>Your NFTs Selected: {{ selectedNFTs.length }}</h4>
+        </div>
+        <div>
+          <h4>Vault NFTs Selected: {{ selectedVaultNFTs.length }}</h4>
+        </div>
+      </div>
+      <div v-if="selectedNFTs.length > 0 && selectedVaultNFTs.length > 0" style="margin: 10px 0;">
+        <div style="background: #f5f5f5; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+          <p><strong>Swap Summary:</strong></p>
+          <p>Giving: {{ selectedNFTs.length }} NFT(s) from your wallet</p>
+          <p>Receiving: {{ selectedVaultNFTs.length }} NFT(s) from vault</p>
+          <p>Fee: {{ getSwapCost() }} TURTLE ({{ vaultInfo.swapFee }} per NFT)</p>
+          <p v-if="selectedNFTs.length !== selectedVaultNFTs.length" style="color: red;">⚠️ Must select equal numbers!</p>
+        </div>
+        <button @click="swapForNFTs" :disabled="selectedNFTs.length !== selectedVaultNFTs.length" style="margin-right: 10px;">
+          Swap NFTs ({{ selectedNFTs.length }} ↔ {{ selectedVaultNFTs.length }})
+        </button>
+      </div>
+      <div v-else>
+        <p>Select NFTs from both your collection and vault above to swap</p>
+      </div>
+
+      <h3 style="margin-top: 30px;">Purchase NFTs with CRO</h3>
       <div style="margin: 10px 0;">
         <button @click="selectBatch(vaultNFTs, selectedVaultNFTs, 0, 10)" style="margin-right: 5px;">Select First 10</button>
         <button @click="selectBatch(vaultNFTs, selectedVaultNFTs, 10, 20)" style="margin-right: 5px;">Select Next 10</button>
-        <button @click="clearVaultSelection()">Clear All</button>
+        <button @click="clearVaultSelection()">Clear Vault Selection</button>
       </div>
       <div v-if="selectedVaultNFTs.length > 0" style="margin: 10px 0;">
         <div style="background: #f5f5f5; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-          <p><strong>Cost Estimation:</strong></p>
-          <p>Swap Cost: {{ getSwapCost() }} TURTLE ({{ vaultInfo.perNFT }} per NFT + {{ vaultInfo.swapFee }} fee each)</p>
-          <p>Purchase Cost: {{ getPurchaseCost() }} CRO ({{ vaultInfo.purchaseFee }} per NFT)</p>
+          <p><strong>Purchase Cost:</strong> {{ getPurchaseCost() }} CRO ({{ vaultInfo.purchaseFee }} per NFT)</p>
         </div>
-        <button @click="swapForNFTs" style="margin-right: 10px;">
-          Swap TURTLE for Selected ({{ selectedVaultNFTs.length }})
-        </button>
         <button @click="purchaseWithCRO" style="margin-right: 10px;">
           Purchase with CRO ({{ selectedVaultNFTs.length }})
         </button>
       </div>
       <div v-else>
-        <p>Select NFTs from vault above to swap/purchase</p>
+        <p>Select NFTs from vault above to purchase</p>
       </div>
     </div>
 
@@ -119,8 +142,7 @@
         <button @click="setPurchaseFee">Set Purchase Fee</button>
       </div>
       <div style="margin: 10px 0;">
-        <input v-model="withdrawAmount" type="number" placeholder="CRO amount" style="margin-right: 10px;" />
-        <button @click="withdrawCRO">Withdraw CRO</button>
+        <button @click="withdrawCRO">Withdraw All CRO</button>
       </div>
     </div>
   </div>
@@ -139,7 +161,7 @@ const selectedVaultNFTs = ref([])
 const isOwner = ref(false)
 const newSwapFee = ref('')
 const newPurchaseFee = ref('')
-const withdrawAmount = ref('')
+
 const lastVaultNFTsFetch = ref(null)
 const contractInfo = ref(null)
 
@@ -160,11 +182,11 @@ function getVaultContract() {
     "function purchaseFeeCRO() external view returns (uint256)",
     "function owner() external view returns (address)",
     "function depositByIds(uint256[] calldata tokenIds) external",
-    "function swapForNFTs(uint256[] calldata tokenIds) external",
+    "function swapForNFTs(uint256[] calldata userTokenIds, uint256[] calldata vaultTokenIds) external",
     "function purchaseNFTsWithCRO(uint256[] calldata tokenIds) external payable",
     "function setSwapFeeTurtle(uint256 _newFee) external",
     "function setPurchaseFeeCRO(uint256 _newFee) external",
-    "function withdrawCRO(uint256 amount) external"
+    "function withdrawCRO() external"
   ]
   
   return new ethers.Contract(contractAddress, abi, signer)
@@ -308,9 +330,8 @@ function selectBatch(nftList, selectedList, start, end) {
 
 function getSwapCost() {
   if (!vaultInfo.value || selectedVaultNFTs.value.length === 0) return '0'
-  const perNFT = parseFloat(vaultInfo.value.perNFT)
   const swapFee = parseFloat(vaultInfo.value.swapFee)
-  const totalCost = (perNFT + swapFee) * selectedVaultNFTs.value.length
+  const totalCost = swapFee * selectedVaultNFTs.value.length
   return totalCost.toFixed(4)
 }
 
@@ -392,37 +413,52 @@ async function depositByTokenIds() {
 
 async function swapForNFTs() {
   if (!account.value) return alert('Connect wallet first')
-  if (selectedVaultNFTs.value.length === 0) return alert('Select vault NFTs first')
+  if (selectedNFTs.value.length === 0) return alert('Select your NFTs to swap')
+  if (selectedVaultNFTs.value.length === 0) return alert('Select vault NFTs to receive')
+  if (selectedNFTs.value.length !== selectedVaultNFTs.value.length) {
+    return alert('Must select equal number of NFTs from both sides')
+  }
   try {
     const contract = getVaultContract()
+    const nftContract = getNFTContract()
     const turtleContract = getTurtleContract()
     
-    // Calculate total cost
-    const perNFT = await contract.turtlePerNFT()
-    const swapFee = await contract.swapFeeTurtle()
-    const costPer = perNFT.add(swapFee)
-    const totalCost = costPer.mul(selectedVaultNFTs.value.length)
+    // Approve NFTs
+    const isApproved = await nftContract.isApprovedForAll(account.value, contractAddress)
+    if (!isApproved) {
+      const approveTx = await nftContract.setApprovalForAll(contractAddress, true)
+      await approveTx.wait()
+    }
     
-    // Check and approve TURTLE tokens
+    // Calculate and approve TURTLE tokens for fee
+    const swapFee = await contract.swapFeeTurtle()
+    const totalCost = swapFee.mul(selectedNFTs.value.length)
+    
     const allowance = await turtleContract.allowance(account.value, contractAddress)
-    if (allowance < totalCost) {
+    if (allowance.lt(totalCost)) {
       const approveTx = await turtleContract.approve(contractAddress, totalCost)
       await approveTx.wait()
     }
     
-    const swappedTokens = [...selectedVaultNFTs.value]
-    const tx = await contract.swapForNFTs(selectedVaultNFTs.value)
+    const userTokens = [...selectedNFTs.value]
+    const vaultTokens = [...selectedVaultNFTs.value]
+    const tx = await contract.swapForNFTs(userTokens, vaultTokens)
     await tx.wait()
     
-    // Add swapped NFTs to user's collection immediately
-    swappedTokens.forEach(tokenId => {
+    // Update local state
+    userTokens.forEach(tokenId => {
+      const index = userNFTs.value.indexOf(tokenId)
+      if (index > -1) userNFTs.value.splice(index, 1)
+    })
+    vaultTokens.forEach(tokenId => {
       if (!userNFTs.value.includes(tokenId)) {
         userNFTs.value.push(tokenId)
       }
     })
     
+    selectedNFTs.value = []
     selectedVaultNFTs.value = []
-    alert(`${swappedTokens.length} NFT(s) swapped successfully`)
+    alert(`${vaultTokens.length} NFT(s) swapped successfully`)
     await loadVaultNFTs()
     await getVaultInfo()
   } catch (error) {
@@ -477,7 +513,7 @@ async function setPurchaseFee() {
   if (!account.value || !isOwner.value) return alert('Owner access required')
   try {
     const contract = getVaultContract()
-    const fee = ethers.utils.parseEther(newPurchaseFee.value)
+    const fee = ethers.utils.parseEther(newPurchaseFee.value.toString())
     const tx = await contract.setPurchaseFeeCRO(fee)
     await tx.wait()
     alert('Purchase fee updated!')
@@ -492,11 +528,9 @@ async function withdrawCRO() {
   if (!account.value || !isOwner.value) return alert('Owner access required')
   try {
     const contract = getVaultContract()
-    const amount = ethers.utils.parseEther(withdrawAmount.value)
-    const tx = await contract.withdrawCRO(amount)
+    const tx = await contract.withdrawCRO()
     await tx.wait()
     alert('CRO withdrawn successfully!')
-    withdrawAmount.value = ''
   } catch (error) {
     alert('Withdrawal failed: ' + error.message)
   }
