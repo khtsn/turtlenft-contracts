@@ -98,13 +98,16 @@ While you could combine them into a single struct, the current design is general
 
 ## Turtle Redemption Vault Features
 * **NFT Deposit System**: Deposit specific NFTs by token IDs to receive TURTLE tokens based on pool ratio
-* **TURTLE-to-NFT Swap**: Exchange TURTLE tokens for specific NFTs by token IDs (with configurable fee)
+* **1:1 NFT Swap**: Exchange your NFTs for vault NFTs on a 1:1 basis with TURTLE fee
+  - Select equal numbers of NFTs from your wallet and vault
+  - Pay configurable TURTLE fee per NFT (default: 100 TURTLE)
+  - All swap fees remain locked in vault, increasing future deposit rewards
 * **CRO Purchase**: Buy specific NFTs directly with CRO native token
 * **Transaction Limits**: Maximum 20 NFTs per transaction for all operations
 * **Efficient Storage**: O(1) NFT lookup with internal tracking system
 * **Security**: OpenZeppelin Ownable and ReentrancyGuard protection
 * **Fee Management**: Owner can adjust swap fees (TURTLE) and purchase fees (CRO)
-* **CRO Withdrawal**: Owner can withdraw collected CRO fees
+* **CRO Withdrawal**: Owner can withdraw all collected CRO fees in one transaction
 * **Automatic Refunds**: Excess CRO payments are automatically refunded
 
 ## Frontend Interface
@@ -113,4 +116,4 @@ The project includes a Vue.js frontend with views for:
 * **NFT**: Minting (admin and public), contract information display
 * **Earning**: Staking, unstaking, claiming rewards, stake management
 * **Faucet**: Token claiming with cooldown, owner fee management
-* **Vault**: Specific NFT deposits by token IDs, TURTLE swaps for specific NFTs, CRO purchases of specific NFTs, vault statistics and available NFT listings
+* **Vault**: Specific NFT deposits by token IDs, 1:1 NFT swaps (user NFTs ↔ vault NFTs), CRO purchases of specific NFTs, vault statistics and available NFT listings
