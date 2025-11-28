@@ -12,8 +12,8 @@ contract TurtleRedemptionVault is IERC721Receiver, Ownable, ReentrancyGuard {
     IERC20 public immutable TURTLE_TOKEN;
     uint256 public constant TOTAL_NFT_SUPPLY = 10625;
     uint256 public constant MAX_BATCH_SIZE = 20;
-    uint256 public swapFeeTurtle = 100 * 1e18; // 100 TURTLE default
-    uint256 public purchaseFeeCRO = 10 * 1e18; // 10 CRO default
+    uint256 public swapFeeTurtle = 35000 * 1e18; // 35k TURTLE default
+    uint256 public purchaseFeeCRO = 288 * 1e18; // 10 CRO default
 
     uint256[] public vaultNFTs;
     mapping(uint256 => uint256) public nftToIndex;
